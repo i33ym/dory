@@ -294,6 +294,18 @@ func (g *GraphFact) WithScore(stage string, score float64) RetrievedUnit {
 	return &cp
 }
 
+// NewGraphFact constructs a GraphFact with the required identity fields.
+func NewGraphFact(id, sourceDocID, subject, predicate, object string, metadata map[string]any) *GraphFact {
+	return &GraphFact{
+		id:          id,
+		sourceDocID: sourceDocID,
+		Subject:     subject,
+		Predicate:   predicate,
+		Object:      object,
+		metadata:    metadata,
+	}
+}
+
 // --- GraphFact JSON serialization ---
 
 type graphFactJSON struct {
@@ -400,6 +412,16 @@ func (s *StructuredRow) WithScore(stage string, score float64) RetrievedUnit {
 	copy(cp.scores, s.scores)
 	cp.scores = append(cp.scores, ScoreEntry{Stage: stage, Score: score})
 	return &cp
+}
+
+// NewStructuredRow constructs a StructuredRow with the required identity fields.
+func NewStructuredRow(id, sourceDocID string, columns map[string]any, metadata map[string]any) *StructuredRow {
+	return &StructuredRow{
+		id:          id,
+		sourceDocID: sourceDocID,
+		Columns:     columns,
+		metadata:    metadata,
+	}
 }
 
 // --- StructuredRow JSON serialization ---

@@ -6,6 +6,9 @@ package eval
 import (
 	"context"
 	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	dory "github.com/i33ym/dory"
@@ -24,16 +27,23 @@ type RetrieverEvaluatorConfig struct {
 	// context. This enables faithfulness and answer relevance metrics.
 	// If nil, those metrics are skipped.
 	Generator func(ctx context.Context, question string, context string) (string, error)
+
+	// JudgeFunc, if set, calls an LLM to judge quality. It receives a
+	// prompt string and returns the LLM's response. When both JudgeFunc
+	// and Generator are set, faithfulness and answer relevance metrics
+	// are computed via LLM-as-judge scoring.
+	JudgeFunc func(ctx context.Context, prompt string) (string, error)
 }
 
 // RetrieverEvaluator implements dory.Evaluator by running a retriever against
 // test cases and computing context precision and context recall. When a
-// Generator is provided it also generates answers (faithfulness and answer
-// relevance are left as future work requiring LLM-as-judge scoring).
+// Generator and JudgeFunc are both provided it also computes faithfulness
+// and answer relevance via LLM-as-judge scoring.
 type RetrieverEvaluator struct {
 	retriever dory.Retriever
 	topK      int
 	generator func(ctx context.Context, question string, context string) (string, error)
+	judgeFunc func(ctx context.Context, prompt string) (string, error)
 }
 
 // NewRetrieverEvaluator creates a RetrieverEvaluator from the given config.
@@ -50,6 +60,7 @@ func NewRetrieverEvaluator(config RetrieverEvaluatorConfig) (*RetrieverEvaluator
 		retriever: config.Retriever,
 		topK:      topK,
 		generator: config.Generator,
+		judgeFunc: config.JudgeFunc,
 	}, nil
 }
 
@@ -89,8 +100,30 @@ func (e *RetrieverEvaluator) Evaluate(ctx context.Context, cases []dory.TestCase
 			}
 			result.GeneratedAnswer = answer
 
-			// Faithfulness and AnswerRelevance require LLM-as-judge scoring.
-			// Left as nil (future work).
+			// Compute faithfulness and answer relevance when a judge is available.
+			if e.judgeFunc != nil {
+				faithPrompt := fmt.Sprintf(
+					"Context:\n%s\n\nAnswer:\n%s\n\nIs the answer supported by the context? Reply with a score from 0.0 to 1.0.",
+					ctxText, answer,
+				)
+				faithResp, err := e.judgeFunc(ctx, faithPrompt)
+				if err != nil {
+					return nil, err
+				}
+				f := parseScore(faithResp)
+				result.Metrics.Faithfulness = &f
+
+				relPrompt := fmt.Sprintf(
+					"Question:\n%s\n\nAnswer:\n%s\n\nDoes the answer address the question? Reply with a score from 0.0 to 1.0.",
+					tc.Question, answer,
+				)
+				relResp, err := e.judgeFunc(ctx, relPrompt)
+				if err != nil {
+					return nil, err
+				}
+				r := parseScore(relResp)
+				result.Metrics.AnswerRelevance = &r
+			}
 		}
 
 		results = append(results, result)
@@ -135,6 +168,23 @@ func contextRecall(units []dory.RetrievedUnit, relevantIDs []string) float64 {
 		}
 	}
 	return float64(hits) / float64(len(relevantIDs))
+}
+
+// scorePattern matches the first decimal or integer number in a string.
+var scorePattern = regexp.MustCompile(`\d+\.?\d*`)
+
+// parseScore extracts the first floating-point number from the response string.
+// If no number is found, it returns 0.
+func parseScore(response string) float64 {
+	match := scorePattern.FindString(response)
+	if match == "" {
+		return 0
+	}
+	score, err := strconv.ParseFloat(match, 64)
+	if err != nil {
+		return 0
+	}
+	return score
 }
 
 // buildContext concatenates the text of all retrieved units into a single

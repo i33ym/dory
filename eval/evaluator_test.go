@@ -182,12 +182,83 @@ func TestEvaluate_WithGenerator(t *testing.T) {
 	if r.GeneratedAnswer != "Generated answer for: What color is the sky?" {
 		t.Errorf("unexpected answer: %s", r.GeneratedAnswer)
 	}
-	// Faithfulness and AnswerRelevance are nil (future LLM-as-judge work).
+	// Without JudgeFunc, Faithfulness and AnswerRelevance remain nil.
 	if r.Metrics.Faithfulness != nil {
-		t.Error("expected Faithfulness to be nil (not yet implemented)")
+		t.Error("expected Faithfulness to be nil without JudgeFunc")
 	}
 	if r.Metrics.AnswerRelevance != nil {
-		t.Error("expected AnswerRelevance to be nil (not yet implemented)")
+		t.Error("expected AnswerRelevance to be nil without JudgeFunc")
+	}
+}
+
+func TestEvaluate_WithJudgeFunc(t *testing.T) {
+	ret := &fakeRetriever{
+		units: []dory.RetrievedUnit{
+			makeChunk("c1", "doc-a", "The sky is blue."),
+			makeChunk("c2", "doc-b", "Water is wet."),
+		},
+	}
+
+	generator := func(_ context.Context, question string, ctxText string) (string, error) {
+		return "The sky is blue.", nil
+	}
+
+	judgeFunc := func(_ context.Context, prompt string) (string, error) {
+		return "0.85", nil
+	}
+
+	ev, err := NewRetrieverEvaluator(RetrieverEvaluatorConfig{
+		Retriever: ret,
+		Generator: generator,
+		JudgeFunc: judgeFunc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := ev.Evaluate(context.Background(), []dory.TestCase{
+		{
+			ID:                  "t1",
+			Question:            "What color is the sky?",
+			ReferenceAnswer:     "Blue",
+			RelevantDocumentIDs: []string{"doc-a"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+
+	if r.Metrics.Faithfulness == nil {
+		t.Fatal("expected Faithfulness to be non-nil with JudgeFunc")
+	}
+	floatClose(t, "Faithfulness", *r.Metrics.Faithfulness, 0.85, 0.001)
+
+	if r.Metrics.AnswerRelevance == nil {
+		t.Fatal("expected AnswerRelevance to be non-nil with JudgeFunc")
+	}
+	floatClose(t, "AnswerRelevance", *r.Metrics.AnswerRelevance, 0.85, 0.001)
+}
+
+func TestParseScore(t *testing.T) {
+	tests := []struct {
+		input string
+		want  float64
+	}{
+		{"0.85", 0.85},
+		{"Score: 0.7", 0.7},
+		{"The score is 0.95 out of 1.0", 0.95},
+		{"no numbers here", 0},
+		{"1", 1.0},
+	}
+	for _, tc := range tests {
+		got := parseScore(tc.input)
+		if math.Abs(got-tc.want) > 0.001 {
+			t.Errorf("parseScore(%q) = %f, want %f", tc.input, got, tc.want)
+		}
 	}
 }
 
