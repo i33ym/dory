@@ -67,7 +67,7 @@ type Chunk struct {
 	ContextPrefix string
 }
 
-func (c *Chunk) ID() string              { return c.id }
+func (c *Chunk) ID() string               { return c.id }
 func (c *Chunk) SourceDocumentID() string { return c.sourceDocID }
 func (c *Chunk) Score() float64           { return c.score }
 func (c *Chunk) Metadata() map[string]any { return c.metadata }
@@ -116,7 +116,7 @@ type GraphFact struct {
 	Object    string
 }
 
-func (g *GraphFact) ID() string              { return g.id }
+func (g *GraphFact) ID() string               { return g.id }
 func (g *GraphFact) SourceDocumentID() string { return g.sourceDocID }
 func (g *GraphFact) Score() float64           { return g.score }
 func (g *GraphFact) Metadata() map[string]any { return g.metadata }
@@ -148,7 +148,7 @@ type StructuredRow struct {
 	Columns map[string]any
 }
 
-func (s *StructuredRow) ID() string              { return s.id }
+func (s *StructuredRow) ID() string               { return s.id }
 func (s *StructuredRow) SourceDocumentID() string { return s.sourceDocID }
 func (s *StructuredRow) Score() float64           { return s.score }
 func (s *StructuredRow) Metadata() map[string]any { return s.metadata }
