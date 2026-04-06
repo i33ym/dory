@@ -1,0 +1,23 @@
+# Binaries and build artifacts
+*.exe
+*.out
+*.test
+/bin/
+
+# Environment files
+.env
+.env.*
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+coverage.html

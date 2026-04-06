@@ -1,0 +1,23 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - godot
+    - misspell
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/i33ym/dory
+
+issues:
+  exclude-rules:
+    # Examples intentionally omit exhaustive error handling for readability.
+    - path: examples/
+      linters:
+        - errcheck
