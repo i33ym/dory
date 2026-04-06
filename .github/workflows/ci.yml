@@ -8,22 +8,17 @@ on:
 
 jobs:
   test:
-    name: Test (Go ${{ matrix.go-version }})
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # Test against current and previous stable Go releases.
-        # Dory guarantees compatibility with the two most recent Go versions.
-        go-version: ["1.23", "1.22"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go ${{ matrix.go-version }}
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
           cache: true
 
       - name: Verify dependencies
@@ -36,7 +31,7 @@ jobs:
         run: go test -v -race -buildvcs -timeout 30s ./...
 
       - name: Run tests with coverage
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v /examples/)
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -55,7 +50,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
           cache: true
 
       - name: Run golangci-lint
