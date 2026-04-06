@@ -2,6 +2,7 @@ package similarity
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 )
 
@@ -80,4 +81,21 @@ func TestCosine(t *testing.T) {
 			t.Errorf("cosine changed with magnitude: %f vs %f", sim1, sim2)
 		}
 	})
+}
+
+func BenchmarkCosine(b *testing.B) {
+	const dims = 1536
+	rng := rand.New(rand.NewSource(42))
+
+	a := make([]float32, dims)
+	v := make([]float32, dims)
+	for i := range a {
+		a[i] = rng.Float32()
+		v[i] = rng.Float32()
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Cosine(a, v)
+	}
 }

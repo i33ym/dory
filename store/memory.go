@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/i33ym/dory"
+	"github.com/i33ym/dory/internal/filter"
 )
 
 // Memory is an in-memory VectorStore suitable for development and testing.
@@ -48,7 +49,7 @@ func (m *Memory) Search(_ context.Context, req dory.SearchRequest) ([]dory.Score
 		if c.Vector == nil || len(req.QueryVector) == 0 {
 			continue
 		}
-		if req.Filter != nil && !matchFilter(c, req.Filter) {
+		if req.Filter != nil && !filter.Match(c.Metadata(), req.Filter) {
 			continue
 		}
 		score := cosine(req.QueryVector, c.Vector)
@@ -79,23 +80,6 @@ func (m *Memory) Delete(_ context.Context, ids []string) error {
 		delete(m.chunks, id)
 	}
 	return nil
-}
-
-func matchFilter(c *dory.Chunk, f *dory.MetadataFilter) bool {
-	meta := c.Metadata()
-	if meta == nil {
-		return false
-	}
-	val, ok := meta[f.Field]
-	if !ok {
-		return false
-	}
-	switch f.Op {
-	case dory.FilterOpEq:
-		return val == f.Value
-	default:
-		return false
-	}
 }
 
 func cosine(a, b []float32) float64 {

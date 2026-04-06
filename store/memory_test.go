@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/i33ym/dory"
@@ -215,5 +217,39 @@ func TestMemory_Delete_NonExistent(t *testing.T) {
 	// Deleting IDs that don't exist should not error.
 	if err := m.Delete(ctx, []string{"nope"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func BenchmarkMemory_Search(b *testing.B) {
+	const (
+		numChunks = 1000
+		dims      = 1536
+	)
+
+	rng := rand.New(rand.NewSource(42))
+	ctx := context.Background()
+	m := NewMemory()
+
+	chunks := make([]*dory.Chunk, numChunks)
+	for i := range chunks {
+		vec := make([]float32, dims)
+		for j := range vec {
+			vec[j] = rng.Float32()
+		}
+		chunks[i] = makeChunk(fmt.Sprintf("c%d", i), vec, nil)
+	}
+	if err := m.Store(ctx, chunks); err != nil {
+		b.Fatal(err)
+	}
+
+	queryVec := make([]float32, dims)
+	for i := range queryVec {
+		queryVec[i] = rng.Float32()
+	}
+	req := dory.SearchRequest{QueryVector: queryVec, TopK: 10}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = m.Search(ctx, req)
 	}
 }

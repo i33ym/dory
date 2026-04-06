@@ -2,6 +2,7 @@ package chunk
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/i33ym/dory"
@@ -234,4 +235,23 @@ func TestFixed_Split(t *testing.T) {
 			t.Errorf("got %q, want %q", chunks[0].SourceURI(), "s3://bucket/file.txt")
 		}
 	})
+}
+
+func BenchmarkFixed_Split(b *testing.B) {
+	// ~10KB document of realistic prose-like text.
+	word := "the quick brown fox jumps over the lazy dog "
+	content := strings.Repeat(word, 10240/len(word))
+
+	doc, err := dory.NewDocument("bench-doc", dory.TextContent(content, ""))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	s := NewFixed(FixedConfig{Size: 512, Overlap: 64})
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = s.Split(ctx, doc)
+	}
 }

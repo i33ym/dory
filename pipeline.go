@@ -23,6 +23,10 @@ type PipelineConfig struct {
 	// AuthMode controls where authorization is enforced. Defaults to PostFilter.
 	// Hybrid mode is not yet implemented and falls back to PostFilter.
 	AuthMode AuthorizationMode
+
+	// Hooks are called at key points in the pipeline lifecycle.
+	// Multiple hooks are called in the order they appear in the slice.
+	Hooks []Hook
 }
 
 // Pipeline wires Dory's pipeline stages together into a single coherent
@@ -36,6 +40,7 @@ type Pipeline struct {
 	reranker   Reranker
 	authorizer Authorizer
 	authMode   AuthorizationMode
+	hooks      []Hook
 }
 
 // NewPipeline constructs a Pipeline from the given configuration.
@@ -62,16 +67,30 @@ func NewPipeline(config PipelineConfig) (*Pipeline, error) {
 		reranker:   config.Reranker,
 		authorizer: config.Authorizer,
 		authMode:   config.AuthMode,
+		hooks:      config.Hooks,
 	}, nil
 }
 
 // Ingest splits each document into chunks, embeds them in batch, and
 // stores them in the vector store. This is the ingestion path.
 func (p *Pipeline) Ingest(ctx context.Context, docs ...*Document) error {
+	for _, h := range p.hooks {
+		if h.BeforeIngest != nil {
+			h.BeforeIngest(ctx, len(docs))
+		}
+	}
+
+	var totalChunks int
 	for _, doc := range docs {
 		chunks, err := p.splitter.Split(ctx, doc)
 		if err != nil {
-			return fmt.Errorf("dory: split document %s: %w", doc.ID(), err)
+			err = fmt.Errorf("dory: split document %s: %w", doc.ID(), err)
+			for _, h := range p.hooks {
+				if h.AfterIngest != nil {
+					h.AfterIngest(ctx, totalChunks, err)
+				}
+			}
+			return err
 		}
 		if len(chunks) == 0 {
 			continue
@@ -85,7 +104,13 @@ func (p *Pipeline) Ingest(ctx context.Context, docs ...*Document) error {
 
 		vectors, err := p.embedder.EmbedBatch(ctx, texts)
 		if err != nil {
-			return fmt.Errorf("dory: embed chunks for document %s: %w", doc.ID(), err)
+			err = fmt.Errorf("dory: embed chunks for document %s: %w", doc.ID(), err)
+			for _, h := range p.hooks {
+				if h.AfterIngest != nil {
+					h.AfterIngest(ctx, totalChunks, err)
+				}
+			}
+			return err
 		}
 
 		for i, c := range chunks {
@@ -93,7 +118,21 @@ func (p *Pipeline) Ingest(ctx context.Context, docs ...*Document) error {
 		}
 
 		if err := p.store.Store(ctx, chunks); err != nil {
-			return fmt.Errorf("dory: store chunks for document %s: %w", doc.ID(), err)
+			err = fmt.Errorf("dory: store chunks for document %s: %w", doc.ID(), err)
+			for _, h := range p.hooks {
+				if h.AfterIngest != nil {
+					h.AfterIngest(ctx, totalChunks, err)
+				}
+			}
+			return err
+		}
+
+		totalChunks += len(chunks)
+	}
+
+	for _, h := range p.hooks {
+		if h.AfterIngest != nil {
+			h.AfterIngest(ctx, totalChunks, nil)
 		}
 	}
 	return nil
@@ -103,6 +142,12 @@ func (p *Pipeline) Ingest(ctx context.Context, docs ...*Document) error {
 // retriever, then optionally reranks, then optionally authorizes
 // based on the configured AuthorizationMode.
 func (p *Pipeline) Retrieve(ctx context.Context, q Query) ([]RetrievedUnit, error) {
+	for _, h := range p.hooks {
+		if h.BeforeRetrieve != nil {
+			h.BeforeRetrieve(ctx, q)
+		}
+	}
+
 	// PreFilter: call Authorizer.Filter before retrieval to restrict search space.
 	if p.authorizer != nil && p.authMode == PreFilter {
 		rs, err := p.authorizer.Filter(ctx, FilterRequest{
@@ -110,7 +155,13 @@ func (p *Pipeline) Retrieve(ctx context.Context, q Query) ([]RetrievedUnit, erro
 			Action:  ActionRead,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("dory: pre-filter authorization: %w", err)
+			err = fmt.Errorf("dory: pre-filter authorization: %w", err)
+			for _, h := range p.hooks {
+				if h.AfterRetrieve != nil {
+					h.AfterRetrieve(ctx, 0, err)
+				}
+			}
+			return nil, err
 		}
 		if rs.Predicate != nil {
 			q.Filters = append(q.Filters, *rs.Predicate)
@@ -119,14 +170,43 @@ func (p *Pipeline) Retrieve(ctx context.Context, q Query) ([]RetrievedUnit, erro
 
 	units, err := p.retriever.Retrieve(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("dory: retrieve: %w", err)
+		err = fmt.Errorf("dory: retrieve: %w", err)
+		for _, h := range p.hooks {
+			if h.AfterRetrieve != nil {
+				h.AfterRetrieve(ctx, 0, err)
+			}
+		}
+		return nil, err
 	}
 
 	// Rerank if a reranker is configured.
 	if p.reranker != nil {
+		for _, h := range p.hooks {
+			if h.BeforeRerank != nil {
+				h.BeforeRerank(ctx, q.Text, len(units))
+			}
+		}
+
 		units, err = p.reranker.Rerank(ctx, q.Text, units)
 		if err != nil {
-			return nil, fmt.Errorf("dory: rerank: %w", err)
+			err = fmt.Errorf("dory: rerank: %w", err)
+			for _, h := range p.hooks {
+				if h.AfterRerank != nil {
+					h.AfterRerank(ctx, 0, err)
+				}
+			}
+			for _, h := range p.hooks {
+				if h.AfterRetrieve != nil {
+					h.AfterRetrieve(ctx, 0, err)
+				}
+			}
+			return nil, err
+		}
+
+		for _, h := range p.hooks {
+			if h.AfterRerank != nil {
+				h.AfterRerank(ctx, len(units), nil)
+			}
 		}
 	}
 
@@ -141,7 +221,13 @@ func (p *Pipeline) Retrieve(ctx context.Context, q Query) ([]RetrievedUnit, erro
 				Resource: Resource(u.SourceDocumentID()),
 			})
 			if err != nil {
-				return nil, fmt.Errorf("dory: post-filter authorization: %w", err)
+				err = fmt.Errorf("dory: post-filter authorization: %w", err)
+				for _, h := range p.hooks {
+					if h.AfterRetrieve != nil {
+						h.AfterRetrieve(ctx, 0, err)
+					}
+				}
+				return nil, err
 			}
 			if ok {
 				allowed = append(allowed, u)
@@ -150,6 +236,11 @@ func (p *Pipeline) Retrieve(ctx context.Context, q Query) ([]RetrievedUnit, erro
 		units = allowed
 	}
 
+	for _, h := range p.hooks {
+		if h.AfterRetrieve != nil {
+			h.AfterRetrieve(ctx, len(units), nil)
+		}
+	}
 	return units, nil
 }
 

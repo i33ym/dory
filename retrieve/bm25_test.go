@@ -2,6 +2,9 @@ package retrieve
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/i33ym/dory"
@@ -128,5 +131,44 @@ func TestBM25_MultipleIndexCalls(t *testing.T) {
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results across both index calls, got %d", len(results))
+	}
+}
+
+func BenchmarkBM25_Retrieve(b *testing.B) {
+	const numChunks = 1000
+
+	// Vocabulary to build realistic chunk text from.
+	vocab := []string{
+		"machine", "learning", "neural", "network", "deep",
+		"transformer", "attention", "embedding", "vector", "search",
+		"retrieval", "augmented", "generation", "language", "model",
+		"training", "inference", "token", "context", "window",
+		"gradient", "descent", "optimization", "loss", "function",
+		"batch", "epoch", "layer", "activation", "weight",
+	}
+
+	rng := rand.New(rand.NewSource(42))
+	bm := NewBM25(BM25Config{})
+
+	chunks := make([]*dory.Chunk, numChunks)
+	for i := range chunks {
+		// Build a chunk with 20-40 words from vocab.
+		wordCount := 20 + rng.Intn(21)
+		words := make([]string, wordCount)
+		for j := range words {
+			words[j] = vocab[rng.Intn(len(vocab))]
+		}
+		chunks[i] = dory.NewChunk(fmt.Sprintf("c%d", i), "doc1", strings.Join(words, " "), nil)
+	}
+
+	if err := bm.Index(context.Background(), chunks); err != nil {
+		b.Fatal(err)
+	}
+
+	q := dory.Query{Text: "deep learning transformer attention model", TopK: 10}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = bm.Retrieve(context.Background(), q)
 	}
 }
