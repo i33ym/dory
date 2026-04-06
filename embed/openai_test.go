@@ -112,9 +112,7 @@ func TestOpenAI_Dimensions(t *testing.T) {
 }
 
 func TestOpenAI_NoAPIKey(t *testing.T) {
-	orig := os.Getenv("OPENAI_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	defer os.Setenv("OPENAI_API_KEY", orig)
+	t.Setenv("OPENAI_API_KEY", "")
 
 	e := NewOpenAI("text-embedding-3-small")
 	_, err := e.Embed(context.Background(), "hello")

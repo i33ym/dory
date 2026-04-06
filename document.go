@@ -61,10 +61,10 @@ func NewDocument(id string, content Content, opts ...DocumentOption) (*Document,
 	}
 	h := sha256.New()
 	if _, err := io.Copy(h, rc); err != nil {
-		rc.Close()
+		_ = rc.Close()
 		return nil, fmt.Errorf("dory: cannot hash content: %w", err)
 	}
-	rc.Close()
+	_ = rc.Close()
 	copy(doc.fingerprint[:], h.Sum(nil))
 
 	for _, opt := range opts {
