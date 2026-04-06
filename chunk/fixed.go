@@ -3,8 +3,8 @@
 package chunk
 
 import (
-	"maps"
 	"context"
+	"maps"
 
 	"github.com/i33ym/dory"
 )
@@ -44,7 +44,7 @@ func (f *Fixed) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk, err
 	var chunks []*dory.Chunk
 	step := size - overlap
 	for i := 0; i < len(text); i += step {
-		end := min(i + size, len(text))
+		end := min(i+size, len(text))
 		chunk := dory.NewChunk(
 			doc.ID+"-"+itoa(len(chunks)),
 			doc.ID,

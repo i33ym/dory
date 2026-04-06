@@ -1,8 +1,9 @@
 package dory
 
-import "strings"
-
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // RetrievedUnit is the common interface for everything Dory can retrieve,
 // regardless of which retrieval strategy produced it. The pipeline —
@@ -164,9 +165,9 @@ func (s *StructuredRow) AsText() string {
 	var result strings.Builder
 	for i, p := range parts {
 		if i > 0 {
-			result .WriteString(", ")
+			result.WriteString(", ")
 		}
-		result .WriteString(p)
+		result.WriteString(p)
 	}
 	return "[row] " + result.String()
 }
