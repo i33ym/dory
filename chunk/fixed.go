@@ -3,6 +3,7 @@
 package chunk
 
 import (
+	"maps"
 	"context"
 
 	"github.com/i33ym/dory"
@@ -43,10 +44,7 @@ func (f *Fixed) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk, err
 	var chunks []*dory.Chunk
 	step := size - overlap
 	for i := 0; i < len(text); i += step {
-		end := i + size
-		if end > len(text) {
-			end = len(text)
-		}
+		end := min(i + size, len(text))
 		chunk := dory.NewChunk(
 			doc.ID+"-"+itoa(len(chunks)),
 			doc.ID,
@@ -78,8 +76,6 @@ func copyMeta(m map[string]any) map[string]any {
 		return nil
 	}
 	cp := make(map[string]any, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
+	maps.Copy(cp, m)
 	return cp
 }

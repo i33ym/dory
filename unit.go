@@ -1,5 +1,7 @@
 package dory
 
+import "strings"
+
 import "fmt"
 
 // RetrievedUnit is the common interface for everything Dory can retrieve,
@@ -159,14 +161,14 @@ func (s *StructuredRow) AsText() string {
 	for k, v := range s.Columns {
 		parts = append(parts, fmt.Sprintf("%s: %v", k, v))
 	}
-	result := ""
+	var result strings.Builder
 	for i, p := range parts {
 		if i > 0 {
-			result += ", "
+			result .WriteString(", ")
 		}
-		result += p
+		result .WriteString(p)
 	}
-	return "[row] " + result
+	return "[row] " + result.String()
 }
 
 func (s *StructuredRow) WithScore(score float64) RetrievedUnit {
