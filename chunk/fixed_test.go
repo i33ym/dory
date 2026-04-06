@@ -7,12 +7,21 @@ import (
 	"github.com/i33ym/dory"
 )
 
+func mustDoc(t *testing.T, id, text string, opts ...dory.DocumentOption) *dory.Document {
+	t.Helper()
+	doc, err := dory.NewDocument(id, dory.TextContent(text, ""), opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc
+}
+
 func TestFixed_Split(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("single chunk when content fits within size", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 100})
-		doc := &dory.Document{ID: "d1", Content: "hello world"}
+		doc := mustDoc(t, "d1", "hello world")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -28,7 +37,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("splits content into equal sized chunks", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 5})
-		doc := &dory.Document{ID: "d1", Content: "abcdefghij"}
+		doc := mustDoc(t, "d1", "abcdefghij")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -47,7 +56,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("last chunk can be shorter", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 4})
-		doc := &dory.Document{ID: "d1", Content: "abcdefg"}
+		doc := mustDoc(t, "d1", "abcdefg")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -66,7 +75,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("overlap between chunks", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 6, Overlap: 2})
-		doc := &dory.Document{ID: "d1", Content: "abcdefghijkl"}
+		doc := mustDoc(t, "d1", "abcdefghijkl")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -88,7 +97,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("empty content returns no chunks", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 10})
-		doc := &dory.Document{ID: "d1", Content: ""}
+		doc := mustDoc(t, "d1", "")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -105,7 +114,7 @@ func TestFixed_Split(t *testing.T) {
 		for i := range content {
 			content[i] = 'a'
 		}
-		doc := &dory.Document{ID: "d1", Content: string(content)}
+		doc := mustDoc(t, "d1", string(content))
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -121,7 +130,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("overlap >= size is reset to zero", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 5, Overlap: 5})
-		doc := &dory.Document{ID: "d1", Content: "abcdefghij"}
+		doc := mustDoc(t, "d1", "abcdefghij")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -134,7 +143,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("chunk IDs are sequential", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 3})
-		doc := &dory.Document{ID: "doc", Content: "abcdefghi"}
+		doc := mustDoc(t, "doc", "abcdefghi")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -150,7 +159,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("source document ID is propagated", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 100})
-		doc := &dory.Document{ID: "my-doc", Content: "hello"}
+		doc := mustDoc(t, "my-doc", "hello")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -163,8 +172,7 @@ func TestFixed_Split(t *testing.T) {
 
 	t.Run("metadata is copied not shared", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 5})
-		meta := map[string]any{"tenant": "acme"}
-		doc := &dory.Document{ID: "d1", Content: "abcdefghij", Metadata: meta}
+		doc := mustDoc(t, "d1", "abcdefghij", dory.WithMetadata("tenant", "acme"))
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
@@ -176,22 +184,54 @@ func TestFixed_Split(t *testing.T) {
 		if chunks[1].Metadata()["tenant"] != "acme" {
 			t.Error("metadata is shared between chunks, should be independent copies")
 		}
-		// Original doc metadata should also be unaffected.
-		if meta["tenant"] != "acme" {
-			t.Error("chunk metadata mutation affected original document metadata")
-		}
 	})
 
 	t.Run("nil metadata is handled", func(t *testing.T) {
 		s := NewFixed(FixedConfig{Size: 100})
-		doc := &dory.Document{ID: "d1", Content: "hello"}
+		doc := mustDoc(t, "d1", "hello")
 
 		chunks, err := s.Split(ctx, doc)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if chunks[0].Metadata() != nil {
-			t.Errorf("expected nil metadata, got %v", chunks[0].Metadata())
+		// NewDocument always initializes metadata, so it won't be nil.
+		// But chunk metadata should exist.
+		if chunks[0].Metadata() == nil {
+			t.Errorf("expected non-nil metadata")
+		}
+	})
+
+	t.Run("position is set on each chunk", func(t *testing.T) {
+		s := NewFixed(FixedConfig{Size: 5})
+		doc := mustDoc(t, "d1", "abcdefghij")
+
+		chunks, err := s.Split(ctx, doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if chunks[0].Position == nil {
+			t.Fatal("expected position on chunk 0")
+		}
+		if chunks[0].Position.StartByte != 0 || chunks[0].Position.EndByte != 5 {
+			t.Errorf("chunk 0 position: got %d-%d, want 0-5",
+				chunks[0].Position.StartByte, chunks[0].Position.EndByte)
+		}
+		if chunks[1].Position.StartByte != 5 || chunks[1].Position.EndByte != 10 {
+			t.Errorf("chunk 1 position: got %d-%d, want 5-10",
+				chunks[1].Position.StartByte, chunks[1].Position.EndByte)
+		}
+	})
+
+	t.Run("source URI is propagated", func(t *testing.T) {
+		s := NewFixed(FixedConfig{Size: 100})
+		doc := mustDoc(t, "d1", "hello", dory.WithSourceURI("s3://bucket/file.txt"))
+
+		chunks, err := s.Split(ctx, doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if chunks[0].SourceURI() != "s3://bucket/file.txt" {
+			t.Errorf("got %q, want %q", chunks[0].SourceURI(), "s3://bucket/file.txt")
 		}
 	})
 }

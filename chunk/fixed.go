@@ -30,7 +30,11 @@ func NewFixed(config FixedConfig) *Fixed {
 
 // Split implements the [dory.Splitter] interface.
 func (f *Fixed) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk, error) {
-	text := doc.Content
+	content, err := doc.Content().Text()
+	if err != nil {
+		return nil, err
+	}
+
 	size := f.config.Size
 	overlap := f.config.Overlap
 
@@ -43,16 +47,19 @@ func (f *Fixed) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk, err
 
 	var chunks []*dory.Chunk
 	step := size - overlap
-	for i := 0; i < len(text); i += step {
-		end := min(i+size, len(text))
-		chunk := dory.NewChunk(
-			doc.ID+"-"+itoa(len(chunks)),
-			doc.ID,
-			text[i:end],
-			copyMeta(doc.Metadata),
+	for i := 0; i < len(content); i += step {
+		end := min(i+size, len(content))
+		chunk := dory.NewChunkWithOptions(
+			doc.ID()+"-"+itoa(len(chunks)),
+			doc.ID(),
+			content[i:end],
+			copyMeta(doc.Metadata()),
+			doc.SourceURI(),
+			&dory.Position{StartByte: i, EndByte: end},
+			0,
 		)
 		chunks = append(chunks, chunk)
-		if end == len(text) {
+		if end == len(content) {
 			break
 		}
 	}

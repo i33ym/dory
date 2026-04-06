@@ -2,10 +2,6 @@
 // fixed-size chunking, OpenAI embeddings, in-memory vector store,
 // and vector retrieval. No authorization. No reranking.
 // Use this as your starting point before reaching for more complex strategies.
-//
-// This example requires concrete implementations of chunk.NewFixed,
-// embed.NewOpenAI, store.NewMemory, and retrieve.NewVector which will
-// be added as the library is built out.
 package main
 
 import (
@@ -24,11 +20,13 @@ func main() {
 	ctx := context.Background()
 
 	// 1. Define a document.
-	doc := &dory.Document{
-		ID:       "doc-001",
-		Content:  "Dory is a retrieval intelligence library for Go...",
-		MimeType: "text/plain",
-		Metadata: map[string]any{"source": "readme"},
+	doc, err := dory.NewDocument(
+		"doc-001",
+		dory.TextContent("Dory is a retrieval intelligence library for Go...", "text/plain"),
+		dory.WithMetadata("source", "readme"),
+	)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// 2. Split the document into chunks.

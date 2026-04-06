@@ -47,7 +47,7 @@ func (v *Vector) Retrieve(ctx context.Context, q dory.Query) ([]dory.RetrievedUn
 
 	units := make([]dory.RetrievedUnit, len(scored))
 	for i, sc := range scored {
-		units[i] = sc.Chunk.WithScore(sc.Score)
+		units[i] = sc.Chunk.WithScore("vector", sc.Score)
 	}
 	return units, nil
 }
