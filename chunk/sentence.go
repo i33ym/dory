@@ -109,7 +109,7 @@ func (s *Sentence) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk, 
 func findOffset(content string, sentences []string, idx int) int {
 	_ = content // kept for clarity; offset is just the sum of prior sentence lengths
 	offset := 0
-	for i := 0; i < idx; i++ {
+	for i := range idx {
 		offset += len(sentences[i])
 	}
 	return offset

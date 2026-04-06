@@ -71,10 +71,7 @@ func (r *Recursive) Split(_ context.Context, doc *dory.Document) ([]*dory.Chunk,
 			// Find the start of this piece in the original content.
 			prevEnd := offset
 			// Back up by overlap characters, but don't go before the previous chunk's start.
-			overlapStart := prevEnd - overlap
-			if overlapStart < 0 {
-				overlapStart = 0
-			}
+			overlapStart := max(prevEnd-overlap, 0)
 			text := content[overlapStart : offset+len(piece)]
 			chunk := dory.NewChunkWithOptions(
 				doc.ID()+"-"+itoa(len(chunks)),
@@ -121,10 +118,7 @@ func recursiveSplit(text string, separators []string, maxSize int) []string {
 	if sep == "" {
 		// Character-level split: break into maxSize pieces.
 		for i := 0; i < len(text); i += maxSize {
-			end := i + maxSize
-			if end > len(text) {
-				end = len(text)
-			}
+			end := min(i+maxSize, len(text))
 			parts = append(parts, text[i:end])
 		}
 		return parts
