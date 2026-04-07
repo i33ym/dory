@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/i33ym/dory"
+	"github.com/i33ym/dory/internal/filter"
 )
 
 // BM25Config holds parameters for BM25 scoring.
@@ -120,6 +121,9 @@ func (b *BM25) Retrieve(_ context.Context, q dory.Query) ([]dory.RetrievedUnit, 
 
 	results := make([]scored, 0, len(b.docs))
 	for i, doc := range b.docs {
+		if !filter.MatchAll(doc.chunk.Metadata(), q.Filters) {
+			continue
+		}
 		var score float64
 		for _, term := range queryTerms {
 			tfRaw, ok := doc.tf[term]

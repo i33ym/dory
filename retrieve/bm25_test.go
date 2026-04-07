@@ -134,6 +134,79 @@ func TestBM25_MultipleIndexCalls(t *testing.T) {
 	}
 }
 
+func TestBM25_RespectsFilters(t *testing.T) {
+	bm := NewBM25(BM25Config{})
+
+	chunks := []*dory.Chunk{
+		dory.NewChunk("c1", "doc1", "dory retrieval library", map[string]any{"tenant_id": "acme"}),
+		dory.NewChunk("c2", "doc2", "dory retrieval pipeline", map[string]any{"tenant_id": "acme"}),
+		dory.NewChunk("c3", "doc3", "dory retrieval search", map[string]any{"tenant_id": "globex"}),
+	}
+
+	if err := bm.Index(context.Background(), chunks); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without filter: all 3 match "dory retrieval".
+	all, err := bm.Retrieve(context.Background(), dory.Query{Text: "dory retrieval", TopK: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("unfiltered: got %d results, want 3", len(all))
+	}
+
+	// With tenant filter: only acme chunks.
+	filtered, err := bm.Retrieve(context.Background(), dory.Query{
+		Text: "dory retrieval",
+		TopK: 10,
+		Filters: []dory.MetadataFilter{
+			{Field: "tenant_id", Op: dory.FilterOpEq, Value: "acme"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("filtered: got %d results, want 2", len(filtered))
+	}
+	for _, r := range filtered {
+		if r.Metadata()["tenant_id"] != "acme" {
+			t.Errorf("got tenant %v, want acme", r.Metadata()["tenant_id"])
+		}
+	}
+}
+
+func TestBM25_NilMetadataSkippedByFilter(t *testing.T) {
+	bm := NewBM25(BM25Config{})
+
+	chunks := []*dory.Chunk{
+		dory.NewChunk("c1", "doc1", "dory search", nil),                                 // no metadata
+		dory.NewChunk("c2", "doc2", "dory search", map[string]any{"tenant_id": "acme"}), // matches
+	}
+
+	if err := bm.Index(context.Background(), chunks); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := bm.Retrieve(context.Background(), dory.Query{
+		Text: "dory search",
+		TopK: 10,
+		Filters: []dory.MetadataFilter{
+			{Field: "tenant_id", Op: dory.FilterOpEq, Value: "acme"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want 1", len(results))
+	}
+	if results[0].ID() != "c2" {
+		t.Errorf("got %q, want c2", results[0].ID())
+	}
+}
+
 func BenchmarkBM25_Retrieve(b *testing.B) {
 	const numChunks = 1000
 
